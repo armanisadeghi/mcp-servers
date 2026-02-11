@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrx Server Manager</title>
+
+<!-- Favicons -->
+<link rel="icon" href="/admin/favicon.ico" sizes="48x48">
+<link rel="icon" href="/admin/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/admin/apple-touch-icon.png">
+<link rel="manifest" href="/admin/site.webmanifest">
+<meta name="theme-color" content="#0E78F9">
+
+<!-- Meta -->
+<meta name="description" content="Matrx Server Manager — deploy and manage isolated application instances">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Matrx Manager">
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #232734; --border: #2e3343;
+    --text: #e4e6f0; --text2: #8b8fa3; --accent: #6366f1; --accent-hover: #818cf8;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --blue: #3b82f6;
+    --radius: 8px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); }
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--surface2); padding: 2px 6px; border-radius: 4px; }
+
+  /* Login */
+  #login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem; width: 400px; max-width: 90vw; }
+  .login-card h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .login-card p { color: var(--text2); margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .login-card input { width: 100%; padding: 0.75rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 0.85rem; margin-bottom: 1rem; outline: none; }
+  .login-card input:focus { border-color: var(--accent); }
+  .login-card .error { color: var(--red); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+
+  /* Layout */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .topbar h1 { font-size: 1.1rem; font-weight: 600; cursor: pointer; }
+  .topbar .right { display: flex; align-items: center; gap: 1rem; }
+  .badge { padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge.admin { background: rgba(99,102,241,0.2); color: var(--accent); }
+  .badge.deployer { background: rgba(59,130,246,0.2); color: var(--blue); }
+  .badge.viewer { background: rgba(139,143,163,0.2); color: var(--text2); }
+  .badge.running { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge.exited, .badge.dead { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge.created { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .container { max-width: 1320px; margin: 0 auto; padding: 1.5rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab { padding: 0.75rem 1.25rem; cursor: pointer; color: var(--text2); font-size: 0.9rem; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Panels */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; }
+  .panel-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .panel-header h2 { font-size: 1rem; font-weight: 600; }
+  .panel-header h3 { font-size: 0.9rem; font-weight: 600; }
+  .panel-body { padding: 1.25rem; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); color: var(--text); font-size: 0.85rem; cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+  .btn:hover { background: var(--border); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.danger { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: var(--red); }
+  .btn.danger:hover { background: rgba(239,68,68,0.25); }
+  .btn.sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  th { color: var(--text2); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .clickable { cursor: pointer; }
+
+  /* Status */
+  .status { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.running { background: var(--green); }
+  .dot.exited, .dot.dead { background: var(--red); }
+  .dot.created, .dot.paused { background: var(--yellow); }
+  .dot.not, .dot.healthy { background: var(--green); }
+  .dot.unhealthy { background: var(--red); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+  @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+  .stat-card .label { color: var(--text2); font-size: 0.8rem; margin-bottom: 0.3rem; }
+  .stat-card .value { font-size: 1.15rem; font-weight: 600; }
+  .stat-card .sub { color: var(--text2); font-size: 0.8rem; margin-top: 0.2rem; }
+
+  /* Key-value list */
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.5rem 1rem; font-size: 0.85rem; }
+  .kv .k { color: var(--text2); }
+  .kv .v { word-break: break-all; }
+  .kv .v.mono { font-family: var(--mono); font-size: 0.82rem; }
+
+  /* Logs */
+  .log-output { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; font-family: var(--mono); font-size: 0.78rem; line-height: 1.6; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500; display: none; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 480px; max-width: 90vw; }
+  .modal h2 { margin-bottom: 1.5rem; font-size: 1.15rem; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; color: var(--text2); font-size: 0.85rem; margin-bottom: 0.35rem; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.65rem 0.85rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 0.85rem; outline: none; font-family: var(--font); }
+  .form-group textarea { font-family: var(--mono); font-size: 0.82rem; resize: vertical; min-height: 80px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+  .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+
+  /* Env table */
+  .env-table td { font-family: var(--mono); font-size: 0.82rem; }
+  .env-table .sensitive { color: var(--text2); font-style: italic; cursor: pointer; }
+  .env-table .sensitive:hover { color: var(--accent); }
+  .env-table input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 8px; font-family: var(--mono); font-size: 0.82rem; width: 100%; outline: none; }
+  .env-table input:focus { border-color: var(--accent); }
+
+  /* Iframe */
+  .portal-frame { border: 1px solid var(--border); border-radius: var(--radius); width: 100%; height: 600px; background: #fff; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; z-index: 600; opacity: 0; transform: translateY(10px); transition: all 0.2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .toast.error { border-color: rgba(239,68,68,0.4); color: var(--red); }
+  .toast.success { border-color: rgba(34,197,94,0.4); color: var(--green); }
+
+  .reveal-token { background: var(--bg); border: 1px solid var(--accent); border-radius: var(--radius); padding: 1rem; margin-top: 1rem; font-family: var(--mono); font-size: 0.85rem; word-break: break-all; }
+  .reveal-token .warn { color: var(--yellow); font-family: var(--font); font-size: 0.8rem; margin-top: 0.5rem; }
+
+  /* Breadcrumb */
+  .breadcrumb { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; font-size: 0.9rem; }
+  .breadcrumb a { color: var(--text2); }
+  .breadcrumb a:hover { color: var(--accent); }
+  .breadcrumb .sep { color: var(--text2); }
+  .breadcrumb .current { color: var(--text); font-weight: 600; }
+
+  /* Detail header */
+  .detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+  .detail-header .left h2 { font-size: 1.3rem; margin-bottom: 0.25rem; }
+  .detail-header .left .sub { color: var(--text2); font-size: 0.9rem; }
+
+  /* Section tabs inside detail */
+  .section-tabs { display: flex; gap: 0; margin-bottom: 1rem; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .section-tab { padding: 0.6rem 1rem; cursor: pointer; color: var(--text2); font-size: 0.85rem; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .section-tab:hover { color: var(--text); }
+  .section-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .section-content { display: none; }
+  .section-content.active { display: block; }
+
+  .loading { color: var(--text2); padding: 2rem; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-overlay">
+  <div class="login-card">
+    <h1>Matrx Server Manager</h1>
+    <p>Enter your admin token to access the dashboard.</p>
+    <div class="error" id="login-error">Invalid token</div>
+    <input type="password" id="login-token" placeholder="Bearer token..." autofocus>
+    <button class="btn primary" style="width:100%" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app" style="display:none">
+  <div class="topbar">
+    <h1 onclick="goHome()">Matrx Server Manager</h1>
+    <div class="right">
+      <span id="role-badge" class="badge admin"></span>
+      <button class="btn sm" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- HOME VIEW -->
+    <div id="view-home">
+      <div class="tabs">
+        <div class="tab active" data-tab="instances">Instances</div>
+        <div class="tab" data-tab="sandboxes">Sandboxes</div>
+        <div class="tab" data-tab="tokens">Tokens</div>
+        <div class="tab" data-tab="system">System</div>
+      </div>
+
+      <!-- Instances Tab -->
+      <div class="tab-content active" id="tab-instances">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Deployed Instances</h2>
+            <div class="btn-group">
+              <button class="btn sm" id="deploy-all-btn" onclick="deployAll()" title="Rebuild image from source and restart all instances">Deploy Updates</button>
+              <button class="btn primary sm" onclick="openCreateModal()">+ New Instance</button>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0;overflow-x:auto;">
+            <table>
+              <thead><tr><th>Name</th><th>Status</th><th>URL</th><th>API Key</th><th>Created</th><th>Actions</th></tr></thead>
+              <tbody id="instances-table"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sandboxes Tab -->
+      <div class="tab-content" id="tab-sandboxes">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Sandbox Environments</h2>
+            <span style="color:var(--text2);font-size:0.85rem" id="sandbox-count"></span>
+          </div>
+          <div class="panel-body" style="padding:0;overflow-x:auto;">
+            <table>
+              <thead><tr><th>Name</th><th>Status</th><th>Terminal</th><th>Sandbox ID</th><th>Image</th><th>Actions</th></tr></thead>
+              <tbody id="sandboxes-table"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tokens Tab -->
+      <div class="tab-content" id="tab-tokens">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Access Tokens</h2>
+            <button class="btn primary sm" onclick="openTokenModal()">+ Create Token</button>
+          </div>
+          <div class="panel-body" style="padding:0;overflow-x:auto;">
+            <table>
+              <thead><tr><th>ID</th><th>Label</th><th>Role</th><th>Created</th><th>Last Used</th><th>Actions</th></tr></thead>
+              <tbody id="tokens-table"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="new-token-reveal" style="display:none">
+          <div class="reveal-token">
+            <div>New token created. Copy it now:</div>
+            <div style="margin-top:0.5rem;font-weight:600" id="new-token-value"></div>
+            <div class="warn">This token will not be shown again.</div>
+            <button class="btn sm" style="margin-top:0.75rem" onclick="copyNewToken()">Copy to Clipboard</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Tab -->
+      <div class="tab-content" id="tab-system">
+        <div class="grid-3" id="system-stats"><div class="stat-card"><div class="label">Loading...</div></div></div>
+        <div class="panel" style="margin-top:1rem">
+          <div class="panel-header">
+            <h2>Server Manager</h2>
+            <button class="btn sm" id="self-rebuild-btn" onclick="selfRebuildManager()">Rebuild Server Manager</button>
+          </div>
+          <div class="panel-body">
+            <p style="color:var(--text2);font-size:0.85rem;margin-bottom:0.5rem">Rebuild and restart the server manager container from source at <code>/srv/mcp-servers/</code>. The admin UI will briefly disconnect during restart.</p>
+            <div id="self-rebuild-status" style="display:none" class="log-output" style="max-height:200px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INSTANCE DETAIL VIEW -->
+    <div id="view-detail" style="display:none">
+      <div class="breadcrumb">
+        <a href="#" onclick="goHome();return false">Instances</a>
+        <span class="sep">/</span>
+        <span class="current" id="detail-breadcrumb">...</span>
+      </div>
+
+      <div class="detail-header">
+        <div class="left">
+          <h2 id="detail-title">Instance</h2>
+          <div class="sub" id="detail-subtitle">Loading...</div>
+        </div>
+        <div class="btn-group" id="detail-actions"></div>
+      </div>
+
+      <!-- Overview cards -->
+      <div class="grid-4" id="detail-stats" style="margin-bottom:1.25rem"></div>
+
+      <!-- Section tabs -->
+      <div class="section-tabs" id="detail-section-tabs">
+        <div class="section-tab active" data-section="overview">Overview</div>
+        <div class="section-tab" data-section="containers">Containers</div>
+        <div class="section-tab" data-section="env">Environment</div>
+        <div class="section-tab" data-section="logs">Logs</div>
+        <div class="section-tab" data-section="backups">Backups</div>
+        <div class="section-tab" data-section="compose">Compose</div>
+        <div class="section-tab" data-section="portal">Admin Portal</div>
+      </div>
+
+      <div class="section-content active" id="section-overview">
+        <div class="panel"><div class="panel-body"><div class="kv" id="detail-overview-kv"></div></div></div>
+      </div>
+
+      <div class="section-content" id="section-containers">
+        <div class="grid-2" id="detail-containers"></div>
+      </div>
+
+      <div class="section-content" id="section-env">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Environment Variables</h3>
+            <div class="btn-group">
+              <button class="btn sm" id="env-edit-btn" onclick="toggleEnvEdit()">Edit</button>
+              <button class="btn sm primary" id="env-save-btn" style="display:none" onclick="saveEnvVars()">Save & Restart</button>
+              <button class="btn sm" id="env-cancel-btn" style="display:none" onclick="cancelEnvEdit()">Cancel</button>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0;overflow-x:auto;">
+            <table class="env-table">
+              <thead><tr><th>Key</th><th>Value</th></tr></thead>
+              <tbody id="env-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="section-logs">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Logs</h3>
+            <div class="btn-group">
+              <button class="btn sm" onclick="loadDetailLogs('app')">App Only</button>
+              <button class="btn sm" onclick="loadDetailLogs('db')">DB Only</button>
+              <button class="btn sm primary" onclick="loadDetailLogs('both')">Both</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="log-output" id="detail-logs">Click a button above to load logs...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="section-backups">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Database Backups</h3>
+            <button class="btn sm primary" onclick="createBackup()">Create Backup Now</button>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <table>
+              <thead><tr><th>File</th><th>Size</th><th>Created</th></tr></thead>
+              <tbody id="backups-table"><tr><td colspan="3" style="color:var(--text2)">No backups yet</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="section-compose">
+        <div class="panel">
+          <div class="panel-header"><h3>docker-compose.yml</h3></div>
+          <div class="panel-body"><div class="log-output" id="detail-compose" style="max-height:600px">Loading...</div></div>
+        </div>
+      </div>
+
+      <div class="section-content" id="section-portal">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Instance Admin Portal</h3>
+            <a id="portal-link" href="#" target="_blank" class="btn sm">Open in New Tab</a>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <iframe id="portal-iframe" class="portal-frame" src="about:blank"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <!-- SANDBOX DETAIL VIEW -->
+    <div id="view-sandbox" style="display:none">
+      <div class="breadcrumb">
+        <a href="#" onclick="goHome();return false">Sandboxes</a>
+        <span class="sep">/</span>
+        <span class="current" id="sbx-breadcrumb">...</span>
+      </div>
+      <div class="detail-header">
+        <div class="left">
+          <h2 id="sbx-title">Sandbox</h2>
+          <div class="sub" id="sbx-subtitle"></div>
+        </div>
+        <div class="btn-group" id="sbx-actions"></div>
+      </div>
+
+      <div class="grid-4" id="sbx-stats" style="margin-bottom:1.25rem"></div>
+
+      <div class="section-tabs" id="sbx-section-tabs">
+        <div class="section-tab active" data-sbxsection="sbx-overview">Overview</div>
+        <div class="section-tab" data-sbxsection="sbx-terminal">Terminal</div>
+        <div class="section-tab" data-sbxsection="sbx-logs">Logs</div>
+        <div class="section-tab" data-sbxsection="sbx-env">Environment</div>
+        <div class="section-tab" data-sbxsection="sbx-exec">Execute Command</div>
+      </div>
+
+      <div class="section-content active" id="sbx-overview">
+        <div class="panel"><div class="panel-body"><div class="kv" id="sbx-overview-kv"></div></div></div>
+      </div>
+
+      <div class="section-content" id="sbx-terminal">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Web Terminal</h3>
+            <a id="sbx-terminal-link" href="#" target="_blank" class="btn sm primary">Open Full Screen</a>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <iframe id="sbx-terminal-iframe" class="portal-frame" style="height:500px;background:#000" src="about:blank"></iframe>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="sbx-logs">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Container Logs</h3>
+            <button class="btn sm primary" onclick="loadSbxLogs()">Refresh</button>
+          </div>
+          <div class="panel-body">
+            <div class="log-output" id="sbx-log-output">Click Refresh to load logs...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="sbx-env">
+        <div class="panel">
+          <div class="panel-header"><h3>Environment Variables</h3></div>
+          <div class="panel-body" style="padding:0;overflow-x:auto;">
+            <table><thead><tr><th>Key</th><th>Value</th></tr></thead>
+            <tbody id="sbx-env-table"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-content" id="sbx-exec">
+        <div class="panel">
+          <div class="panel-header"><h3>Execute Command</h3></div>
+          <div class="panel-body">
+            <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+              <input id="sbx-exec-input" placeholder="e.g. python3 --version" style="flex:1;padding:0.65rem 0.85rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none">
+              <button class="btn primary" onclick="runSbxExec()">Run</button>
+            </div>
+            <div class="log-output" id="sbx-exec-output" style="min-height:100px">Output will appear here...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h2>Create New Instance</h2>
+    <div class="form-group"><label>Instance Name (lowercase, hyphens ok)</label><input id="ci-name" placeholder="my-project"></div>
+    <div class="form-group"><label>Display Name</label><input id="ci-display" placeholder="My Project"></div>
+    <div class="form-group"><label>PostgreSQL Image (optional)</label><input id="ci-pg" placeholder="postgres:17-alpine"></div>
+    <div class="form-actions"><button class="btn" onclick="closeCreateModal()">Cancel</button><button class="btn primary" id="ci-submit" onclick="submitCreateInstance()">Create</button></div>
+  </div>
+</div>
+<div class="modal-overlay" id="token-modal">
+  <div class="modal">
+    <h2>Create Access Token</h2>
+    <div class="form-group"><label>Label</label><input id="ct-label" placeholder="e.g. CI Deployer"></div>
+    <div class="form-group"><label>Role</label><select id="ct-role"><option value="admin">admin</option><option value="deployer">deployer</option><option value="viewer">viewer</option></select></div>
+    <div class="form-actions"><button class="btn" onclick="closeTokenModal()">Cancel</button><button class="btn primary" id="ct-submit" onclick="submitCreateToken()">Create Token</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.origin;
+let TOKEN = localStorage.getItem("mcp_token") || "";
+let ROLE = "";
+let lastNewToken = "";
+let currentInstance = null;
+let currentDetail = null;
+let envEditing = false;
+
+// ── API ──────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json", ...opts.headers },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json();
+  if (res.status === 401) { doLogout(); throw new Error("Unauthorized"); }
+  if (res.status === 403) { toast("Forbidden", "error"); throw new Error("Forbidden"); }
+  if (!res.ok && data.error) { toast(data.error, "error"); throw new Error(data.error); }
+  return data;
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const input = document.getElementById("login-token");
+  TOKEN = input.value.trim();
+  if (!TOKEN) return;
+  try {
+    await api("/api/system");
+    localStorage.setItem("mcp_token", TOKEN);
+    document.getElementById("login-error").style.display = "none";
+    document.getElementById("login-overlay").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    try { await api("/api/tokens"); ROLE = "admin"; } catch { ROLE = "viewer"; }
+    updateRoleBadge();
+    loadAll();
+  } catch {
+    document.getElementById("login-error").style.display = "block";
+  }
+}
+
+function doLogout() {
+  TOKEN = ""; localStorage.removeItem("mcp_token");
+  document.getElementById("login-overlay").style.display = "flex";
+  document.getElementById("app").style.display = "none";
+}
+
+function updateRoleBadge() {
+  const b = document.getElementById("role-badge");
+  b.textContent = ROLE; b.className = `badge ${ROLE}`;
+}
+
+(async () => {
+  if (TOKEN) {
+    try {
+      await api("/api/system");
+      document.getElementById("login-overlay").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      try { await api("/api/tokens"); ROLE = "admin"; } catch { ROLE = "viewer"; }
+      updateRoleBadge(); loadAll();
+    } catch { doLogout(); }
+  }
+  document.getElementById("login-token").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+})();
+
+// ── Navigation ───────────────────────────────────────────────────────────
+function goHome() {
+  currentInstance = null; currentDetail = null; envEditing = false;
+  currentSandbox = null; currentSbxDetail = null;
+  document.getElementById("view-detail").style.display = "none";
+  document.getElementById("view-sandbox").style.display = "none";
+  document.getElementById("view-home").style.display = "block";
+  loadInstances();
+  loadSandboxes();
+}
+
+function goToInstance(name) {
+  currentInstance = name;
+  document.getElementById("view-home").style.display = "none";
+  document.getElementById("view-sandbox").style.display = "none";
+  document.getElementById("view-detail").style.display = "block";
+  // Reset section to overview
+  document.querySelectorAll("#detail-section-tabs .section-tab").forEach(t => t.classList.remove("active"));
+  document.querySelector('#detail-section-tabs .section-tab[data-section="overview"]').classList.add("active");
+  document.querySelectorAll(".section-content").forEach(c => c.classList.remove("active"));
+  document.getElementById("section-overview").classList.add("active");
+  envEditing = false;
+  loadInstanceDetail(name);
+}
+
+// ── Tabs (home) ──────────────────────────────────────────────────────────
+document.querySelectorAll(".tabs .tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tabs .tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll("#view-home > .tab-content").forEach(c => c.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+  });
+});
+
+// Section tabs (detail)
+document.getElementById("detail-section-tabs").addEventListener("click", e => {
+  const tab = e.target.closest(".section-tab");
+  if (!tab) return;
+  document.querySelectorAll("#detail-section-tabs .section-tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".section-content").forEach(c => c.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById("section-" + tab.dataset.section).classList.add("active");
+  // Lazy load portal iframe
+  if (tab.dataset.section === "portal" && currentDetail) {
+    const iframe = document.getElementById("portal-iframe");
+    if (iframe.src === "about:blank") iframe.src = currentDetail.admin_url;
+  }
+});
+
+// ── Data Loading ─────────────────────────────────────────────────────────
+function loadAll() { loadInstances(); loadSandboxes(); loadSystem(); if (ROLE === "admin") loadTokens(); }
+
+async function loadInstances() {
+  try {
+    const data = await api("/api/instances");
+    const tbody = document.getElementById("instances-table");
+    if (data.count === 0) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text2)">No instances yet.</td></tr>`; return; }
+    tbody.innerHTML = data.instances.map(i => {
+      const s = i.app_container || "not found";
+      const cls = s === "running" ? "running" : s.startsWith("exited") ? "exited" : "not";
+      const masked = i.api_key ? i.api_key.substring(0, 12) + "..." : "-";
+      const date = i.created_at ? new Date(i.created_at).toLocaleDateString() : "-";
+      return `<tr>
+        <td class="clickable" onclick="goToInstance('${esc(i.name)}')"><strong style="color:var(--accent)">${esc(i.name)}</strong><br><span style="color:var(--text2);font-size:0.8rem">${esc(i.display_name)}</span></td>
+        <td><span class="status"><span class="dot ${cls}"></span>${esc(s)}</span></td>
+        <td><a href="${esc(i.url)}" target="_blank">${esc(i.url?.replace("https://",""))}</a></td>
+        <td><span style="font-family:var(--mono);font-size:0.8rem;cursor:pointer;color:var(--text2)" onclick="event.stopPropagation();copyText('${esc(i.api_key)}')" title="Click to copy">${esc(masked)}</span></td>
+        <td>${date}</td>
+        <td style="white-space:nowrap">
+          <button class="btn sm" onclick="event.stopPropagation();goToInstance('${esc(i.name)}')">Details</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch(e) { console.error(e); }
+}
+
+async function loadInstanceDetail(name) {
+  document.getElementById("detail-breadcrumb").textContent = name;
+  document.getElementById("detail-title").textContent = "Loading...";
+  document.getElementById("detail-subtitle").textContent = "";
+  document.getElementById("detail-stats").innerHTML = "";
+  document.getElementById("detail-overview-kv").innerHTML = "";
+  document.getElementById("detail-containers").innerHTML = "";
+  document.getElementById("detail-actions").innerHTML = "";
+  document.getElementById("detail-compose").textContent = "";
+  document.getElementById("detail-logs").textContent = "Click a button above to load logs...";
+  document.getElementById("portal-iframe").src = "about:blank";
+
+  try {
+    const d = await api(`/api/instances/${name}`);
+    currentDetail = d;
+
+    document.getElementById("detail-title").textContent = d.display_name || d.name;
+    document.getElementById("detail-subtitle").innerHTML = `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a>`;
+
+    // Actions
+    const appRunning = d.containers.app?.status === "running";
+    document.getElementById("detail-actions").innerHTML = `
+      <button class="btn sm primary" id="detail-rebuild-btn" onclick="rebuildInstance('${esc(name)}')">Rebuild &amp; Deploy</button>
+      ${appRunning ? `<button class="btn sm" onclick="detailAction('restart')">Restart</button><button class="btn sm" onclick="detailAction('stop')">Stop</button>` : `<button class="btn sm primary" onclick="detailAction('start')">Start</button>`}
+      <button class="btn sm" onclick="createBackup()">Backup DB</button>
+      <button class="btn sm danger" onclick="detailRemove()">Remove</button>
+    `;
+
+    // Stats cards
+    const appS = d.containers.app?.stats;
+    const dbS = d.containers.db?.stats;
+    document.getElementById("detail-stats").innerHTML = `
+      <div class="stat-card"><div class="label">App Status</div><div class="value"><span class="status"><span class="dot ${d.containers.app?.status || "not"}"></span>${esc(d.containers.app?.status || "not found")}</span></div></div>
+      <div class="stat-card"><div class="label">DB Status</div><div class="value"><span class="status"><span class="dot ${d.containers.db?.status || "not"}"></span>${esc(d.containers.db?.status || "not found")}</span></div>${d.containers.db?.health ? `<div class="sub">Health: ${esc(d.containers.db.health)}</div>` : ""}</div>
+      <div class="stat-card"><div class="label">App CPU / Mem</div><div class="value">${appS ? esc(appS.cpu) : "-"}</div>${appS ? `<div class="sub">${esc(appS.mem)}</div>` : ""}</div>
+      <div class="stat-card"><div class="label">DB CPU / Mem</div><div class="value">${dbS ? esc(dbS.cpu) : "-"}</div>${dbS ? `<div class="sub">${esc(dbS.mem)}</div>` : ""}</div>
+    `;
+
+    // Overview KV
+    const kvPairs = [
+      ["Instance Name", d.name],
+      ["Display Name", d.display_name],
+      ["URL", `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a>`],
+      ["Admin Portal", `<a href="${esc(d.admin_url)}" target="_blank">${esc(d.admin_url)}</a>`],
+      ["API Key", `<span style="cursor:pointer" onclick="copyText('${esc(d.api_key)}')" title="Click to copy">${esc(d.api_key)}</span>`],
+      ["DB Password", `<span class="sensitive" onclick="this.textContent=this.dataset.v" data-v="${esc(d.db_password)}">click to reveal</span>`],
+      ["PostgreSQL Image", d.postgres_image],
+      ["Directory", d.directory],
+      ["Created", d.created_at ? new Date(d.created_at).toLocaleString() : "-"],
+    ];
+    document.getElementById("detail-overview-kv").innerHTML = kvPairs.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join("");
+
+    // Containers detail
+    document.getElementById("detail-containers").innerHTML = [
+      containerCard("App Container", `ship-${name}`, d.containers.app),
+      containerCard("Database Container", `db-${name}`, d.containers.db),
+    ].join("");
+
+    // Env vars
+    renderEnvTable(d.env_vars, false);
+
+    // Backups
+    renderBackups(d.backups);
+
+    // Compose
+    document.getElementById("detail-compose").textContent = d.compose_file || "No compose file found";
+
+    // Portal link
+    document.getElementById("portal-link").href = d.admin_url;
+
+  } catch(e) { console.error(e); document.getElementById("detail-title").textContent = "Error loading instance"; }
+}
+
+function containerCard(title, containerName, c) {
+  if (!c || !c.status) return `<div class="panel"><div class="panel-header"><h3>${title}</h3></div><div class="panel-body" style="color:var(--text2)">Container not found</div></div>`;
+  const s = c.stats;
+  return `<div class="panel">
+    <div class="panel-header"><h3>${title}</h3><span class="badge ${c.status}">${c.status}</span></div>
+    <div class="panel-body">
+      <div class="kv">
+        <div class="k">Container</div><div class="v mono">${esc(containerName)}</div>
+        <div class="k">Image</div><div class="v mono">${esc(c.image)}</div>
+        <div class="k">Started</div><div class="v">${c.started_at ? new Date(c.started_at).toLocaleString() : "-"}</div>
+        <div class="k">Created</div><div class="v">${c.created ? new Date(c.created).toLocaleString() : "-"}</div>
+        <div class="k">Restarts</div><div class="v">${c.restart_count ?? "-"}</div>
+        ${c.health ? `<div class="k">Health</div><div class="v"><span class="status"><span class="dot ${c.health}"></span>${c.health}</span></div>` : ""}
+        ${c.networks ? `<div class="k">Networks</div><div class="v">${c.networks.join(", ")}</div>` : ""}
+        ${s ? `
+          <div class="k">CPU</div><div class="v">${esc(s.cpu)}</div>
+          <div class="k">Memory</div><div class="v">${esc(s.mem)} (${esc(s.mem_pct)})</div>
+          <div class="k">Network I/O</div><div class="v">${esc(s.net)}</div>
+          <div class="k">Block I/O</div><div class="v">${esc(s.block)}</div>
+          <div class="k">PIDs</div><div class="v">${esc(s.pids)}</div>
+        ` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEnvTable(vars, editing) {
+  const tbody = document.getElementById("env-table-body");
+  if (!vars || vars.length === 0) { tbody.innerHTML = `<tr><td colspan="2" style="color:var(--text2)">No environment variables</td></tr>`; return; }
+  tbody.innerHTML = vars.map(v => {
+    if (editing) {
+      return `<tr><td>${esc(v.key)}</td><td><input data-env-key="${esc(v.key)}" value="${esc(v.value)}"></td></tr>`;
+    }
+    const display = v.sensitive && v.value ? `<span class="sensitive" onclick="this.textContent=this.dataset.v" data-v="${esc(v.value)}">click to reveal</span>` : esc(v.value) || `<span style="color:var(--text2);font-style:italic">empty</span>`;
+    return `<tr><td>${esc(v.key)}</td><td>${display}</td></tr>`;
+  }).join("");
+}
+
+function toggleEnvEdit() {
+  envEditing = true;
+  renderEnvTable(currentDetail.env_vars, true);
+  document.getElementById("env-edit-btn").style.display = "none";
+  document.getElementById("env-save-btn").style.display = "";
+  document.getElementById("env-cancel-btn").style.display = "";
+}
+
+function cancelEnvEdit() {
+  envEditing = false;
+  renderEnvTable(currentDetail.env_vars, false);
+  document.getElementById("env-edit-btn").style.display = "";
+  document.getElementById("env-save-btn").style.display = "none";
+  document.getElementById("env-cancel-btn").style.display = "none";
+}
+
+async function saveEnvVars() {
+  const inputs = document.querySelectorAll("#env-table-body input[data-env-key]");
+  const envVars = {};
+  inputs.forEach(input => { envVars[input.dataset.envKey] = input.value; });
+  try {
+    await api(`/api/instances/${currentInstance}/env`, { method: "PUT", body: { env_vars: envVars, restart: true } });
+    toast("Environment updated & restarting", "success");
+    cancelEnvEdit();
+    setTimeout(() => loadInstanceDetail(currentInstance), 3000);
+  } catch {}
+}
+
+function renderBackups(backups) {
+  const tbody = document.getElementById("backups-table");
+  if (!backups || backups.length === 0) { tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text2)">No backups yet</td></tr>`; return; }
+  tbody.innerHTML = backups.map(b => `<tr><td style="font-family:var(--mono);font-size:0.82rem">${esc(b.file)}</td><td>${esc(b.size)}</td><td>${new Date(b.created).toLocaleString()}</td></tr>`).join("");
+}
+
+// ── Detail Actions ───────────────────────────────────────────────────────
+async function detailAction(action) {
+  if (!currentInstance) return;
+  if (action === "stop" && !confirm(`Stop instance "${currentInstance}"?`)) return;
+  try {
+    await api(`/api/instances/${currentInstance}/${action}`, { method: "POST" });
+    toast(`${action} sent for ${currentInstance}`, "success");
+    setTimeout(() => loadInstanceDetail(currentInstance), 2000);
+  } catch {}
+}
+
+async function detailRemove() {
+  if (!currentInstance || !confirm(`Remove instance "${currentInstance}"?`)) return;
+  const full = confirm("Also DELETE all data (database + files)?");
+  try {
+    await api(`/api/instances/${currentInstance}?delete_data=${full}`, { method: "DELETE" });
+    toast("Removed " + currentInstance, "success");
+    goHome();
+  } catch {}
+}
+
+async function createBackup() {
+  if (!currentInstance) return;
+  toast("Creating backup...", "");
+  try {
+    const r = await api(`/api/instances/${currentInstance}/backup`, { method: "POST" });
+    toast(`Backup created: ${r.size}`, "success");
+    loadInstanceDetail(currentInstance);
+  } catch {}
+}
+
+async function loadDetailLogs(service) {
+  if (!currentInstance) return;
+  document.getElementById("detail-logs").textContent = "Loading...";
+  try {
+    const data = await api(`/api/instances/${currentInstance}/logs?service=${service}&tail=200`);
+    let text = "";
+    if (data.app) text += "══════ APP LOGS ══════\n" + (data.app.output || data.app.error || "No output") + "\n\n";
+    if (data.db) text += "══════ DB LOGS ══════\n" + (data.db.output || data.db.error || "No output");
+    document.getElementById("detail-logs").textContent = text || "No logs available.";
+    // Scroll to bottom
+    const el = document.getElementById("detail-logs");
+    el.scrollTop = el.scrollHeight;
+  } catch { document.getElementById("detail-logs").textContent = "Failed to fetch logs."; }
+}
+
+// ── Home Tab Data ────────────────────────────────────────────────────────
+async function loadTokens() {
+  try {
+    const data = await api("/api/tokens");
+    const tbody = document.getElementById("tokens-table");
+    if (data.count === 0) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text2)">No tokens.</td></tr>`; return; }
+    tbody.innerHTML = data.tokens.map(t => `<tr>
+      <td><code>${esc(t.id)}</code></td>
+      <td>${esc(t.label)}</td>
+      <td><span class="badge ${t.role}">${esc(t.role)}</span></td>
+      <td>${t.created_at ? new Date(t.created_at).toLocaleDateString() : "-"}</td>
+      <td>${t.last_used_at ? new Date(t.last_used_at).toLocaleString() : "Never"}</td>
+      <td><button class="btn sm danger" onclick="revokeToken('${esc(t.id)}','${esc(t.label)}')">Revoke</button></td>
+    </tr>`).join("");
+  } catch {}
+}
+
+async function loadSystem() {
+  try {
+    const s = await api("/api/system");
+    document.getElementById("system-stats").innerHTML = `
+      <div class="stat-card"><div class="label">Hostname</div><div class="value" style="font-size:1rem">${esc(s.hostname)}</div></div>
+      <div class="stat-card"><div class="label">CPUs</div><div class="value">${s.cpus}</div></div>
+      <div class="stat-card"><div class="label">Memory</div><div class="value">${esc(s.memory?.percent)}</div><div class="sub">${esc(s.memory?.used)} / ${esc(s.memory?.total)}</div></div>
+      <div class="stat-card"><div class="label">Disk</div><div class="value">${esc(s.disk?.percent)}</div><div class="sub">${esc(s.disk?.used)} / ${esc(s.disk?.total)}</div></div>
+      <div class="stat-card"><div class="label">Uptime</div><div class="value">${s.uptime_hours}h</div></div>
+      <div class="stat-card"><div class="label">Docker</div><div class="value" style="font-size:0.85rem">${esc(s.docker)}</div></div>
+      <div class="stat-card"><div class="label">Load</div><div class="value" style="font-size:0.85rem">${esc(s.load_average)}</div></div>
+      <div class="stat-card"><div class="label">CPU Model</div><div class="value" style="font-size:0.8rem">${esc(s.cpu_model)}</div></div>
+    `;
+  } catch {}
+}
+
+// ── Create Instance ──────────────────────────────────────────────────────
+function openCreateModal() { document.getElementById("create-modal").classList.add("open"); document.getElementById("ci-name").focus(); }
+function closeCreateModal() { document.getElementById("create-modal").classList.remove("open"); }
+
+async function submitCreateInstance() {
+  const name = document.getElementById("ci-name").value.trim();
+  const display_name = document.getElementById("ci-display").value.trim();
+  const pg = document.getElementById("ci-pg").value.trim();
+  if (!name || !display_name) { toast("Name and display name required", "error"); return; }
+  document.getElementById("ci-submit").disabled = true;
+  try {
+    const body = { name, display_name }; if (pg) body.postgres_image = pg;
+    const r = await api("/api/instances", { method: "POST", body });
+    closeCreateModal(); document.getElementById("ci-name").value = ""; document.getElementById("ci-display").value = ""; document.getElementById("ci-pg").value = "";
+    toast(`Created ${name}`, "success");
+    goToInstance(name);
+  } catch {} finally { document.getElementById("ci-submit").disabled = false; }
+}
+
+// ── Token Actions ────────────────────────────────────────────────────────
+function openTokenModal() { document.getElementById("token-modal").classList.add("open"); document.getElementById("ct-label").focus(); }
+function closeTokenModal() { document.getElementById("token-modal").classList.remove("open"); }
+
+async function submitCreateToken() {
+  const label = document.getElementById("ct-label").value.trim();
+  const role = document.getElementById("ct-role").value;
+  if (!label) { toast("Label required", "error"); return; }
+  document.getElementById("ct-submit").disabled = true;
+  try {
+    const r = await api("/api/tokens", { method: "POST", body: { label, role } });
+    closeTokenModal(); document.getElementById("ct-label").value = "";
+    lastNewToken = r.token;
+    document.getElementById("new-token-value").textContent = r.token;
+    document.getElementById("new-token-reveal").style.display = "block";
+    toast("Token created!", "success"); loadTokens();
+  } catch {} finally { document.getElementById("ct-submit").disabled = false; }
+}
+
+function copyNewToken() { navigator.clipboard.writeText(lastNewToken); toast("Copied", "success"); }
+
+async function revokeToken(id, label) {
+  if (!confirm(`Revoke "${label}"?`)) return;
+  try { await api(`/api/tokens/${id}`, { method: "DELETE" }); toast("Revoked", "success"); loadTokens(); } catch {}
+}
+
+// ── Sandboxes ────────────────────────────────────────────────────────
+let currentSandbox = null;
+let currentSbxDetail = null;
+
+async function loadSandboxes() {
+  try {
+    const data = await api("/api/sandboxes");
+    const tbody = document.getElementById("sandboxes-table");
+    document.getElementById("sandbox-count").textContent = `${data.count} running`;
+    if (data.count === 0) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text2)">No sandboxes running.</td></tr>`; return; }
+    tbody.innerHTML = data.sandboxes.map(s => {
+      const cls = s.state === "running" ? "running" : s.state === "exited" ? "exited" : "not";
+      return `<tr>
+        <td class="clickable" onclick="goToSandbox('${esc(s.name)}')"><strong style="color:var(--accent)">${esc(s.name)}</strong></td>
+        <td><span class="status"><span class="dot ${cls}"></span>${esc(s.state)}</span></td>
+        <td><a href="${esc(s.url)}" target="_blank" class="btn sm" style="padding:3px 10px;font-size:0.78rem">Open Terminal</a></td>
+        <td><code style="font-size:0.8rem">${esc(s.name.replace("sandbox-","sbx-00"))}</code></td>
+        <td style="font-size:0.8rem;color:var(--text2)">${esc(s.image)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn sm" onclick="event.stopPropagation();goToSandbox('${esc(s.name)}')">Details</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch(e) { console.error(e); }
+}
+
+function goToSandbox(name) {
+  currentSandbox = name;
+  document.getElementById("view-home").style.display = "none";
+  document.getElementById("view-detail").style.display = "none";
+  document.getElementById("view-sandbox").style.display = "block";
+  // Reset section tabs
+  document.querySelectorAll("#sbx-section-tabs .section-tab").forEach(t => t.classList.remove("active"));
+  document.querySelector('#sbx-section-tabs .section-tab[data-sbxsection="sbx-overview"]').classList.add("active");
+  document.querySelectorAll("#view-sandbox .section-content").forEach(c => c.classList.remove("active"));
+  document.getElementById("sbx-overview").classList.add("active");
+  document.getElementById("sbx-terminal-iframe").src = "about:blank";
+  loadSandboxDetail(name);
+}
+
+// Sandbox section tab clicks
+document.getElementById("sbx-section-tabs").addEventListener("click", e => {
+  const tab = e.target.closest(".section-tab");
+  if (!tab) return;
+  document.querySelectorAll("#sbx-section-tabs .section-tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll("#view-sandbox .section-content").forEach(c => c.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById(tab.dataset.sbxsection).classList.add("active");
+  // Lazy load terminal iframe
+  if (tab.dataset.sbxsection === "sbx-terminal" && currentSbxDetail) {
+    const iframe = document.getElementById("sbx-terminal-iframe");
+    if (iframe.src === "about:blank") iframe.src = currentSbxDetail.url;
+  }
+});
+
+async function loadSandboxDetail(name) {
+  document.getElementById("sbx-breadcrumb").textContent = name;
+  document.getElementById("sbx-title").textContent = name;
+  document.getElementById("sbx-subtitle").textContent = "Loading...";
+  try {
+    const d = await api(`/api/sandboxes/${name}`);
+    currentSbxDetail = d;
+    document.getElementById("sbx-title").textContent = name;
+    document.getElementById("sbx-subtitle").innerHTML = `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a> &mdash; Web Terminal`;
+
+    // Actions
+    const isRunning = d.state === "running";
+    document.getElementById("sbx-actions").innerHTML = `
+      ${isRunning ? `<button class="btn sm" onclick="sbxAction('restart')">Restart</button><button class="btn sm" onclick="sbxAction('stop')">Stop</button>` : `<button class="btn sm primary" onclick="sbxAction('start')">Start</button>`}
+    `;
+
+    // Stats cards
+    const s = d.stats;
+    document.getElementById("sbx-stats").innerHTML = `
+      <div class="stat-card"><div class="label">Status</div><div class="value"><span class="status"><span class="dot ${d.state}"></span>${esc(d.state)}</span></div>${d.health ? `<div class="sub">Health: ${esc(d.health)}</div>` : ""}</div>
+      <div class="stat-card"><div class="label">CPU / Memory</div><div class="value">${s ? esc(s.cpu) : "-"}</div>${s ? `<div class="sub">${esc(s.mem)} (${esc(s.mem_pct)})</div>` : ""}</div>
+      <div class="stat-card"><div class="label">Network I/O</div><div class="value" style="font-size:0.85rem">${s ? esc(s.net) : "-"}</div></div>
+      <div class="stat-card"><div class="label">Restarts</div><div class="value">${d.restart_count ?? 0}</div><div class="sub">Image: ${esc(d.image)}</div></div>
+    `;
+
+    // Overview KV
+    const kvPairs = [
+      ["Name", d.name],
+      ["Terminal URL", `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a>`],
+      ["Sandbox ID", d.sandbox_id],
+      ["Mode", d.sandbox_mode],
+      ["Image", d.image],
+      ["Created", d.created ? new Date(d.created).toLocaleString() : "-"],
+      ["Started", d.started_at ? new Date(d.started_at).toLocaleString() : "-"],
+      ["PIDs", s?.pids || "-"],
+      ["Block I/O", s?.block || "-"],
+    ];
+    document.getElementById("sbx-overview-kv").innerHTML = kvPairs.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join("");
+
+    // Terminal link
+    document.getElementById("sbx-terminal-link").href = d.url;
+
+    // Env table
+    const sensitive = ["PASSWORD", "SECRET", "TOKEN", "KEY", "PASS"];
+    const envRows = Object.entries(d.env || {}).map(([k, v]) => {
+      const isSens = sensitive.some(s => k.toUpperCase().includes(s));
+      const display = isSens ? `<span class="sensitive" onclick="this.textContent=this.dataset.v" data-v="${esc(v)}">click to reveal</span>` : esc(v);
+      return `<tr><td style="font-family:var(--mono);font-size:0.82rem">${esc(k)}</td><td style="font-family:var(--mono);font-size:0.82rem">${display}</td></tr>`;
+    });
+    document.getElementById("sbx-env-table").innerHTML = envRows.join("") || `<tr><td colspan="2" style="color:var(--text2)">No environment variables</td></tr>`;
+
+  } catch(e) { console.error(e); document.getElementById("sbx-title").textContent = "Error"; }
+}
+
+async function sbxAction(action) {
+  if (!currentSandbox) return;
+  if (action === "stop" && !confirm(`Stop "${currentSandbox}"?`)) return;
+  try {
+    await api(`/api/sandboxes/${currentSandbox}/${action}`, { method: "POST" });
+    toast(`${action} sent for ${currentSandbox}`, "success");
+    setTimeout(() => loadSandboxDetail(currentSandbox), 2000);
+  } catch {}
+}
+
+async function loadSbxLogs() {
+  if (!currentSandbox) return;
+  document.getElementById("sbx-log-output").textContent = "Loading...";
+  try {
+    const data = await api(`/api/sandboxes/${currentSandbox}/logs?tail=200`);
+    document.getElementById("sbx-log-output").textContent = data.output || "No logs.";
+    const el = document.getElementById("sbx-log-output");
+    el.scrollTop = el.scrollHeight;
+  } catch { document.getElementById("sbx-log-output").textContent = "Failed to fetch logs."; }
+}
+
+async function runSbxExec() {
+  if (!currentSandbox) return;
+  const cmd = document.getElementById("sbx-exec-input").value.trim();
+  if (!cmd) return;
+  document.getElementById("sbx-exec-output").textContent = "Running...";
+  try {
+    const data = await api(`/api/sandboxes/${currentSandbox}/exec`, { method: "POST", body: { command: cmd } });
+    document.getElementById("sbx-exec-output").textContent = data.output || data.error || "(no output)";
+  } catch(e) { document.getElementById("sbx-exec-output").textContent = "Error: " + e.message; }
+}
+
+document.getElementById("sbx-exec-input")?.addEventListener("keydown", e => { if (e.key === "Enter") runSbxExec(); });
+
+// ── Utilities ────────────────────────────────────────────────────────────
+function esc(s) { if (!s) return ""; const d = document.createElement("div"); d.textContent = String(s); return d.innerHTML; }
+function copyText(t) { navigator.clipboard.writeText(t); toast("Copied", "success"); }
+function toast(msg, type) {
+  const el = document.getElementById("toast"); el.textContent = msg;
+  el.className = "toast show" + (type ? " " + type : "");
+  clearTimeout(el._t); el._t = setTimeout(() => el.className = "toast", 3000);
+}
+
+// ── Rebuild / Deploy ─────────────────────────────────────────────────────
+
+async function deployAll() {
+  if (!confirm("Rebuild the matrx-ship image from source and restart ALL instances?\n\nThis may take 2-5 minutes.")) return;
+  const btn = document.getElementById("deploy-all-btn");
+  btn.disabled = true; btn.textContent = "Building...";
+  toast("Building image & restarting all instances... this may take a few minutes", "");
+  try {
+    const r = await api("/api/rebuild", { method: "POST", body: {} });
+    if (r.success) {
+      toast(`Deploy complete — ${r.instances_restarted?.length || 0} instance(s) restarted`, "success");
+      loadInstances();
+    } else {
+      toast(`Deploy failed at step: ${r.step || "unknown"} — ${r.error || "check logs"}`, "error");
+    }
+  } catch (e) {
+    toast("Deploy failed: " + e.message, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "Deploy Updates";
+  }
+}
+
+async function rebuildInstance(name) {
+  if (!confirm(`Rebuild image and redeploy "${name}"?\n\nThis rebuilds the shared image and restarts just this instance. Takes 2-5 minutes.`)) return;
+  const btn = document.getElementById("detail-rebuild-btn");
+  btn.disabled = true; btn.textContent = "Building...";
+  toast("Building image & restarting instance... this may take a few minutes", "");
+  try {
+    const r = await api("/api/rebuild", { method: "POST", body: { name } });
+    if (r.success) {
+      toast(`Rebuild complete for ${name}`, "success");
+      setTimeout(() => loadInstanceDetail(name), 3000);
+    } else {
+      toast(`Rebuild failed: ${r.error || "check logs"}`, "error");
+    }
+  } catch (e) {
+    toast("Rebuild failed: " + e.message, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "Rebuild & Deploy";
+  }
+}
+
+async function selfRebuildManager() {
+  if (!confirm("Rebuild and restart the Server Manager?\n\nThe admin UI will disconnect for ~30-60 seconds while the container rebuilds.\n\nContinue?")) return;
+  const btn = document.getElementById("self-rebuild-btn");
+  const statusEl = document.getElementById("self-rebuild-status");
+  btn.disabled = true; btn.textContent = "Rebuilding...";
+  statusEl.style.display = "block"; statusEl.textContent = "Sending rebuild command...";
+  toast("Rebuilding server manager... UI will disconnect briefly", "");
+  try {
+    const r = await api("/api/self-rebuild", { method: "POST" });
+    statusEl.textContent = r.output || JSON.stringify(r, null, 2);
+    if (r.success) {
+      statusEl.textContent += "\n\n✓ Rebuild triggered. Waiting for reconnect...";
+      // Poll until the server comes back
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          await api("/health");
+          clearInterval(poll);
+          statusEl.textContent += `\n✓ Server is back online! (after ~${attempts * 3}s)`;
+          toast("Server manager rebuilt and back online!", "success");
+          btn.disabled = false; btn.textContent = "Rebuild Server Manager";
+          loadSystem();
+        } catch {
+          if (attempts > 40) { // ~2 min timeout
+            clearInterval(poll);
+            statusEl.textContent += "\n✗ Timed out waiting for server. Refresh the page manually.";
+            btn.disabled = false; btn.textContent = "Rebuild Server Manager";
+          } else {
+            statusEl.textContent = statusEl.textContent.replace(/\nWaiting\.\.\. \(\d+s\)$/, "") + `\nWaiting... (${attempts * 3}s)`;
+          }
+        }
+      }, 3000);
+    } else {
+      toast("Self-rebuild failed: " + (r.error || r.output), "error");
+      btn.disabled = false; btn.textContent = "Rebuild Server Manager";
+    }
+  } catch (e) {
+    // Expected — the server goes down during rebuild
+    statusEl.textContent = "Server disconnected (expected during rebuild). Waiting for reconnect...";
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        await api("/health");
+        clearInterval(poll);
+        statusEl.textContent += `\n✓ Server is back online! (after ~${attempts * 3}s)`;
+        toast("Server manager rebuilt and back online!", "success");
+        btn.disabled = false; btn.textContent = "Rebuild Server Manager";
+        loadSystem();
+      } catch {
+        if (attempts > 40) {
+          clearInterval(poll);
+          statusEl.textContent += "\n✗ Timed out. Refresh the page manually.";
+          btn.disabled = false; btn.textContent = "Rebuild Server Manager";
+        }
+      }
+    }, 3000);
+  }
+}
+
+document.querySelectorAll(".modal-overlay").forEach(o => o.addEventListener("click", e => { if (e.target === o) o.classList.remove("open"); }));
+setInterval(() => { if (document.getElementById("app").style.display !== "none" && !currentInstance && !currentSandbox) { loadInstances(); loadSandboxes(); } }, 30000);
+</script>
+</body>
+</html>

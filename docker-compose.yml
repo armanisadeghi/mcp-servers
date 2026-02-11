@@ -1,0 +1,47 @@
+services:
+  mcp-example:
+    build:
+      context: ./servers/example
+      dockerfile: Dockerfile
+    container_name: mcp-example
+    restart: unless-stopped
+    environment:
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN}
+      NODE_ENV: production
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-example.rule=Host(`mcp-example.dev.codematrx.com`)"
+      - "traefik.http.routers.mcp-example.entrypoints=websecure"
+      - "traefik.http.routers.mcp-example.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-example.loadbalancer.server.port=3000"
+
+  server-manager:
+    build:
+      context: ./servers/server-manager
+      dockerfile: Dockerfile
+    container_name: mcp-server-manager
+    restart: unless-stopped
+    environment:
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN}
+      NODE_ENV: production
+    volumes:
+      # Docker socket — allows managing all containers on the host
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Host /srv — all stack configs, compose files, MCP server source
+      - /srv:/host-srv
+      # Host /data — coolify remnants, any persistent data
+      - /data:/host-data
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-server-manager.rule=Host(`mcp.dev.codematrx.com`)"
+      - "traefik.http.routers.mcp-server-manager.entrypoints=websecure"
+      - "traefik.http.routers.mcp-server-manager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-server-manager.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true
