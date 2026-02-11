@@ -1115,6 +1115,13 @@ app.use(express.json());
 // Serve admin dashboard (static files, no auth — login handled client-side)
 app.use("/admin", express.static(join(__dirname, "..", "public")));
 
+// Serve favicon at root level so browsers find it
+app.get("/favicon.ico", (_req, res) => res.sendFile(join(__dirname, "..", "public", "icon.svg")));
+app.get("/icon.svg", (_req, res) => res.sendFile(join(__dirname, "..", "public", "icon.svg")));
+
+// Redirect bare / to /admin
+app.get("/", (_req, res) => res.redirect("/admin"));
+
 // Health (no auth)
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", server: "matrx-server-manager", timestamp: new Date().toISOString(), uptime: Math.floor(process.uptime()) });
