@@ -22,6 +22,13 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
+# Install AWS CLI v2
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip" \
+    && apt-get update && apt-get install -y --no-install-recommends unzip \
+    && unzip /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws /var/lib/apt/lists/*
+
 # ── Stage 1: Build the React admin UI ────────────────────────────────────────
 FROM base AS admin-builder
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
