@@ -80,6 +80,15 @@ function isPlaceholderKey(key: string): boolean {
   );
 }
 
+/** Returns the correct command prefix based on whether the project has package.json */
+function shipCmd(sub?: string): string {
+  const hasPackageJson = existsSync(path.join(process.cwd(), "package.json"));
+  if (hasPackageJson) {
+    return sub ? `pnpm ship:${sub}` : "pnpm ship";
+  }
+  return sub ? `bash scripts/matrx/ship.sh ${sub}` : "bash scripts/matrx/ship.sh";
+}
+
 function loadConfig(): ShipConfig {
   const envUrl = process.env.MATRX_SHIP_URL;
   const envKey = process.env.MATRX_SHIP_API_KEY;
@@ -93,7 +102,7 @@ function loadConfig(): ShipConfig {
     console.error("❌ No .matrx-ship.json found in this project.");
     console.error("");
     console.error("   To set up, run:");
-    console.error('     pnpm ship:init my-project "My Project Name"');
+    console.error(`     ${shipCmd("init")} my-project "My Project Name"`);
     console.error("");
     console.error("   Or set environment variables:");
     console.error("     export MATRX_SHIP_URL=https://ship-myproject.dev.codematrx.com");
@@ -122,7 +131,7 @@ function loadConfig(): ShipConfig {
     console.error(`   Current:  ${config.url}`);
     console.error("");
     console.error("   Run this to auto-provision an instance:");
-    console.error('     pnpm ship:init my-project "My Project Name"');
+    console.error(`     ${shipCmd("init")} my-project "My Project Name"`);
     process.exit(1);
   }
 
@@ -422,7 +431,7 @@ async function handleSetup(args: string[]): Promise<void> {
   }
 
   if (!token) {
-    console.error("❌ Usage: pnpm ship:setup --token YOUR_SERVER_TOKEN");
+    console.error(`❌ Usage: ${shipCmd("setup")} --token YOUR_SERVER_TOKEN`);
     console.error("");
     console.error("   The server token is the MCP bearer token from your deployment server.");
     console.error("   This is a one-time setup per machine — the token is saved globally.");
@@ -506,7 +515,7 @@ async function handleInit(args: string[]): Promise<void> {
     projectName = path.basename(process.cwd()).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
     if (!projectName) {
       console.error("❌ Could not determine project name from directory.");
-      console.error('   Usage: pnpm ship:init my-project "My Project Name"');
+      console.error(`   Usage: ${shipCmd("init")} my-project "My Project Name"`);
       process.exit(1);
     }
     console.log(`📁 Using project name from directory: ${projectName}`);
@@ -541,10 +550,10 @@ async function handleInit(args: string[]): Promise<void> {
     console.error("❌ No server token found.");
     console.error("");
     console.error("   You need to configure your server credentials first (one-time per machine):");
-    console.error("     pnpm ship:setup --token YOUR_MCP_SERVER_TOKEN");
+    console.error(`     ${shipCmd("setup")} --token YOUR_MCP_SERVER_TOKEN`);
     console.error("");
     console.error("   Or pass the token directly:");
-    console.error(`     pnpm ship:init ${projectName} "${displayName}" --token YOUR_TOKEN`);
+    console.error(`     ${shipCmd("init")} ${projectName} "${displayName}" --token YOUR_TOKEN`);
     console.error("");
     console.error("   Or set the environment variable:");
     console.error("     export MATRX_SHIP_SERVER_TOKEN=your_token_here");
@@ -571,7 +580,40 @@ async function handleInit(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  if (result.error) {
+  // Handle "already exists" — try to retrieve the existing instance
+  const errorMsg = typeof result.error === "string" ? result.error : "";
+  if (errorMsg.toLowerCase().includes("already exists")) {
+    console.log(`ℹ️  Instance '${projectName}' already exists. Retrieving info...`);
+    try {
+      const existing = await callMcpTool(serverConfig!, "app_get", { name: projectName });
+      if (existing.url && existing.api_key) {
+        result = { success: true, url: existing.url, api_key: existing.api_key };
+      } else if (existing.instance && typeof existing.instance === "object") {
+        const inst = existing.instance as Record<string, unknown>;
+        if (inst.url && inst.api_key) {
+          result = { success: true, url: inst.url, api_key: inst.api_key };
+        }
+      }
+    } catch {
+      // app_get may not exist — fall through to error
+    }
+
+    if (!result.success) {
+      console.error(`❌ Instance '${projectName}' already exists on the server but could not retrieve its config.`);
+      console.error("");
+      console.error("   Check the admin UI for the URL and API key:");
+      console.error(`     ${serverConfig!.server}/admin/`);
+      console.error("");
+      console.error("   Then configure manually:");
+      const hasPackageJson = existsSync(path.join(process.cwd(), "package.json"));
+      if (hasPackageJson) {
+        console.error(`     pnpm ship:init --url https://ship-${projectName}.dev.codematrx.com --key YOUR_API_KEY`);
+      } else {
+        console.error(`     bash scripts/matrx/ship.sh init --url https://ship-${projectName}.dev.codematrx.com --key YOUR_API_KEY`);
+      }
+      process.exit(1);
+    }
+  } else if (result.error) {
     console.error(`❌ ${result.error}`);
     process.exit(1);
   }
@@ -640,8 +682,13 @@ async function handleInit(args: string[]): Promise<void> {
   console.log(`   🔑 API Key:   ${apiKey}`);
   console.log(`   📄 Config:    ${configPath}`);
   console.log("");
+  const hasPackageJson = existsSync(path.join(process.cwd(), "package.json"));
   console.log("   You're ready to ship:");
-  console.log('     pnpm ship "your first commit message"');
+  if (hasPackageJson) {
+    console.log('     pnpm ship "your first commit message"');
+  } else {
+    console.log('     bash scripts/matrx/ship.sh "your first commit message"');
+  }
   console.log("");
 }
 
@@ -660,7 +707,7 @@ async function handleLegacyInit(args: string[]): Promise<void> {
   }
 
   if (!url || !key) {
-    console.error("❌ Usage: pnpm ship:init --url URL --key API_KEY");
+    console.error(`❌ Usage: ${shipCmd("init")} --url URL --key API_KEY`);
     process.exit(1);
   }
 
