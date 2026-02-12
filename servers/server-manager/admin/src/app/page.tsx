@@ -12,7 +12,7 @@ import {
   History, Trash2, Wrench, ArrowDownToLine, LogIn, Key, Terminal,
   Play, Square, RotateCw, ExternalLink, ChevronLeft, Copy,
   Plus, Settings, FileText, Database, Cpu, HardDrive, Monitor,
-  X, Eye, EyeOff, Globe, Layers,
+  X, Eye, EyeOff, Globe, Layers, Check,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -151,6 +151,7 @@ export default function AdminPage() {
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const [buildPhase, setBuildPhase] = useState<string | null>(null);
+  const [logsCopied, setLogsCopied] = useState(false);
 
   // Instance detail data
   const [instanceDetail, setInstanceDetail] = useState<Record<string, unknown> | null>(null);
@@ -1056,9 +1057,24 @@ export default function AdminPage() {
                       {buildPhase === "done" && <CheckCircle2 className="size-4 text-green-500" />}
                       {buildPhase === "error" && <AlertTriangle className="size-4 text-destructive" />}
                     </CardTitle>
-                    {!deploying && !deployingMgr && (
-                      <Button variant="ghost" size="sm" onClick={() => { setBuildLogs([]); setBuildPhase(null); }}>Clear</Button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(buildLogs.join("\n"));
+                          setLogsCopied(true);
+                          setTimeout(() => setLogsCopied(false), 2000);
+                          toast.success("Build logs copied to clipboard");
+                        }}
+                      >
+                        {logsCopied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
+                        {logsCopied ? "Copied" : "Copy"}
+                      </Button>
+                      {!deploying && !deployingMgr && (
+                        <Button variant="ghost" size="sm" onClick={() => { setBuildLogs([]); setBuildPhase(null); }}>Clear</Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
