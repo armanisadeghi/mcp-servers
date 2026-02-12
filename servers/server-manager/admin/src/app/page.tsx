@@ -1027,7 +1027,7 @@ export default function AdminPage() {
                   <div><CardTitle className="text-base flex items-center gap-2"><Container className="size-4" /> Docker Containers</CardTitle><CardDescription className="mt-1">{systemInfo.docker}</CardDescription></div>
                 </div>
               </CardHeader>
-              <CardContent><div className="space-y-1 font-mono text-sm">{systemInfo.containers.map((c, i) => <div key={i} className="py-0.5 text-muted-foreground">{c}</div>)}</div></CardContent>
+              <CardContent><div className="space-y-1 font-mono text-sm">{(systemInfo.containers ?? []).map((c, i) => <div key={i} className="py-0.5 text-muted-foreground">{c}</div>)}</div></CardContent>
             </Card>
 
             <Card>

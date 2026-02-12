@@ -88,6 +88,23 @@ function createServer() {
 const app = express();
 app.use(express.json());
 
+// Info page (no auth) — so browsers don't see "Cannot GET /"
+app.get("/", (_req, res) => {
+  res.json({
+    name: "matrx-example-mcp",
+    version: "1.0.0",
+    description: "Example MCP server demonstrating Streamable HTTP transport",
+    transport: "streamable-http",
+    endpoints: {
+      mcp: "POST /mcp — MCP protocol endpoint (requires Bearer token)",
+      health: "GET /health — Health check (no auth)",
+    },
+    tools: ["echo", "health"],
+    resources: ["server-info"],
+    docs: "https://github.com/armanisadeghi/mcp-servers",
+  });
+});
+
 // Health endpoint (no auth)
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

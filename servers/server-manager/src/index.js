@@ -750,6 +750,7 @@ function getSystemInfo() {
   const disk = exec("df -h / | tail -1 | awk '{print $2, $3, $4, $5}'");
   const diskParts = disk.output?.split(" ") || [];
   const dockerInfo = exec("docker info --format '{{.ContainersRunning}} running, {{.ContainersPaused}} paused, {{.ContainersStopped}} stopped, {{.Images}} images'");
+  const containerList = exec("docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'");
   const load = exec("cat /proc/loadavg 2>/dev/null || uptime");
   return {
     hostname: hostname(),
@@ -765,6 +766,7 @@ function getSystemInfo() {
     uptime_hours: (osUptime() / 3600).toFixed(1),
     load_average: load.output,
     docker: dockerInfo.output,
+    containers: containerList.output?.split("\n").filter(Boolean) || [],
   };
 }
 

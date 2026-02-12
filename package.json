@@ -1,0 +1,23 @@
+{
+  "name": "mcp-servers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Matrx MCP server infrastructure — Server Manager, example MCP, and admin UI",
+  "scripts": {
+    "env:pull": "bash scripts/matrx/env-sync.sh pull",
+    "env:push": "bash scripts/matrx/env-sync.sh push",
+    "env:diff": "bash scripts/matrx/env-sync.sh diff",
+    "env:status": "bash scripts/matrx/env-sync.sh status",
+    "env:pull:force": "bash scripts/matrx/env-sync.sh pull --force",
+    "env:push:force": "bash scripts/matrx/env-sync.sh push --force",
+    "ship": "bash scripts/matrx/ship.sh",
+    "ship:minor": "bash scripts/matrx/ship.sh --minor",
+    "ship:major": "bash scripts/matrx/ship.sh --major",
+    "ship:init": "bash scripts/matrx/ship.sh init",
+    "ship:setup": "bash scripts/matrx/ship.sh setup",
+    "ship:history": "bash scripts/matrx/ship.sh history",
+    "ship:update": "bash scripts/matrx/ship.sh update",
+    "tools:update": "curl -sL https://raw.githubusercontent.com/armanisadeghi/matrx-dev-tools/main/install.sh | bash"
+  },
+  "packageManager": "pnpm@10.28.2"
+}

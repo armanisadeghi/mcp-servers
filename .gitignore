@@ -10,6 +10,9 @@ next-env.d.ts
 # Environment (contains secrets)
 .env
 
+# Matrx Ship (contains API key)
+.matrx-ship.json
+
 # OS
 .DS_Store
 
