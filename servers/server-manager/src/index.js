@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import { z } from "zod";
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { cpus, totalmem, freemem, uptime as osUptime, hostname } from "node:os";
@@ -424,7 +424,7 @@ function rebuildInstances({ name, skip_build, triggered_by } = {}) {
     exec("docker tag matrx-ship:latest matrx-ship:rollback 2>/dev/null");
 
     // Build with both :latest and :timestamp tags
-    results.build = exec(`docker build -t matrx-ship:latest -t matrx-ship:${buildTag} ${src}`, { timeout: 300000 });
+    results.build = exec(`docker buildx build --load -t matrx-ship:latest -t matrx-ship:${buildTag} ${src}`, { timeout: 600000 });
     if (!results.build.success) {
       // Record failed build
       recordBuild({
@@ -1352,6 +1352,7 @@ app.put("/api/instances/:name/env", authMiddleware, requireRole("admin", "deploy
 
 // ── Rebuild / Deploy ────────────────────────────────────────────────────────
 
+// Non-streaming rebuild (for MCP tools and simple API calls)
 app.post("/api/rebuild", authMiddleware, requireRole("admin", "deployer"), async (req, res) => {
   const name = req.query.name || req.body?.name || undefined;
   const skip_build = req.query.skip_build === "true" || req.body?.skip_build === true;
@@ -1360,6 +1361,214 @@ app.post("/api/rebuild", authMiddleware, requireRole("admin", "deployer"), async
   res.status(result.success ? 200 : 500).json(result);
 });
 
+// Streaming rebuild — sends real-time build logs via Server-Sent Events
+app.post("/api/rebuild/stream", authMiddleware, requireRole("admin", "deployer"), async (req, res) => {
+  const name = req.query.name || req.body?.name || undefined;
+  const skip_build = req.query.skip_build === "true" || req.body?.skip_build === true;
+  const triggered_by = req.tokenEntry?.label || "deploy-ui";
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const config = loadDeployments();
+  const src = resolveHostPath(config.defaults?.source || "/srv/projects/matrx-ship");
+  const buildTag = generateBuildTag();
+  const started_at = new Date().toISOString();
+
+  const gitCommit = exec(`git -C ${src} rev-parse --short HEAD`);
+  const gitLog = exec(`git -C ${src} log -1 --pretty=format:"%s"`);
+
+  send("log", { message: `Build started at ${started_at}` });
+  send("log", { message: `Source: ${src}` });
+  send("log", { message: `Git: ${gitCommit.output || "?"} — ${gitLog.output || "?"}` });
+  send("log", { message: `Build tag: ${buildTag}` });
+
+  if (!skip_build) {
+    // Tag current as rollback
+    exec("docker tag matrx-ship:latest matrx-ship:rollback 2>/dev/null");
+    send("log", { message: "Tagged current :latest as :rollback" });
+    send("phase", { phase: "build", message: "Building Docker image..." });
+
+    try {
+      const buildResult = await new Promise((resolve, reject) => {
+        const proc = spawn("docker", ["buildx", "build", "--load", "--progress=plain", "-t", `matrx-ship:latest`, "-t", `matrx-ship:${buildTag}`, src], {
+          env: { ...process.env, PATH: process.env.PATH, DOCKER_BUILDKIT: "1" },
+        });
+
+        let stdout = "";
+        let stderr = "";
+
+        proc.stdout.on("data", (chunk) => {
+          const text = chunk.toString();
+          stdout += text;
+          for (const line of text.split("\n").filter(Boolean)) {
+            send("log", { message: line });
+          }
+        });
+
+        proc.stderr.on("data", (chunk) => {
+          const text = chunk.toString();
+          stderr += text;
+          for (const line of text.split("\n").filter(Boolean)) {
+            send("log", { message: line });
+          }
+        });
+
+        proc.on("close", (code) => {
+          if (code === 0) resolve({ success: true, output: stdout + stderr });
+          else reject(new Error(stderr || `Build exited with code ${code}`));
+        });
+
+        proc.on("error", (err) => reject(err));
+      });
+
+      send("phase", { phase: "build-done", message: "Docker image built successfully" });
+
+      // Get image ID
+      const imgInspect = exec("docker inspect matrx-ship:latest --format '{{.Id}}'");
+      const imageId = imgInspect.output?.replace("sha256:", "").substring(0, 12) || null;
+      send("log", { message: `Image ID: ${imageId}` });
+
+      // Restart instances
+      const targets = name ? [name] : Object.keys(config.instances);
+      send("phase", { phase: "restart", message: `Restarting ${targets.length} instance(s)...` });
+
+      const restartResults = {};
+      for (const t of targets) {
+        if (!config.instances[t]) { restartResults[t] = { error: "not found" }; continue; }
+        send("log", { message: `Restarting ${t}...` });
+        restartResults[t] = exec("docker compose up -d --force-recreate app", { cwd: join(APPS_DIR, t), timeout: 60000 });
+        send("log", { message: `${t}: ${restartResults[t].success ? "restarted" : restartResults[t].error}` });
+      }
+
+      const finished_at = new Date().toISOString();
+      const duration_ms = Date.now() - new Date(started_at).getTime();
+
+      // Record successful build
+      recordBuild({
+        id: `bld_${randomHex(6)}`,
+        tag: buildTag,
+        timestamp: started_at,
+        git_commit: gitCommit.output || "unknown",
+        git_message: gitLog.output || "unknown",
+        image_id: imageId,
+        success: true,
+        error: null,
+        duration_ms,
+        triggered_by,
+        instances_restarted: targets,
+      });
+
+      try { cleanupBuildImages(); } catch { /* non-fatal */ }
+
+      send("done", { success: true, build_tag: buildTag, image_id: imageId, instances_restarted: targets, duration_ms, started_at, finished_at });
+    } catch (err) {
+      const duration_ms = Date.now() - new Date(started_at).getTime();
+
+      recordBuild({
+        id: `bld_${randomHex(6)}`,
+        tag: buildTag,
+        timestamp: started_at,
+        git_commit: gitCommit.output || "unknown",
+        git_message: gitLog.output || "unknown",
+        image_id: null,
+        success: false,
+        error: err.message,
+        duration_ms,
+        triggered_by,
+        instances_restarted: [],
+      });
+
+      send("error", { success: false, error: err.message, duration_ms });
+    }
+  } else {
+    // Skip build, just restart
+    const targets = name ? [name] : Object.keys(config.instances);
+    send("phase", { phase: "restart", message: `Restarting ${targets.length} instance(s) (no rebuild)...` });
+
+    for (const t of targets) {
+      if (!config.instances[t]) continue;
+      send("log", { message: `Restarting ${t}...` });
+      const r = exec("docker compose up -d --force-recreate app", { cwd: join(APPS_DIR, t), timeout: 60000 });
+      send("log", { message: `${t}: ${r.success ? "restarted" : r.error}` });
+    }
+
+    send("done", { success: true, instances_restarted: targets, image_rebuilt: false });
+  }
+
+  res.end();
+});
+
+// Streaming self-rebuild — sends real-time logs via Server-Sent Events
+app.post("/api/self-rebuild/stream", authMiddleware, requireRole("admin"), async (_req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const mcpDir = join(HOST_SRV, "mcp-servers");
+  if (!existsSync(join(mcpDir, "docker-compose.yml"))) {
+    send("error", { success: false, error: "docker-compose.yml not found in /srv/mcp-servers/" });
+    res.end();
+    return;
+  }
+
+  send("phase", { phase: "build", message: "Rebuilding server manager..." });
+  send("log", { message: "Running: docker compose up -d --build server-manager" });
+  send("log", { message: `Working directory: ${mcpDir}` });
+
+  try {
+    const proc = spawn("docker", ["compose", "up", "-d", "--build", "server-manager"], {
+      cwd: mcpDir,
+      env: { ...process.env, PATH: process.env.PATH },
+    });
+
+    proc.stdout.on("data", (chunk) => {
+      for (const line of chunk.toString().split("\n").filter(Boolean)) {
+        send("log", { message: line });
+      }
+    });
+
+    proc.stderr.on("data", (chunk) => {
+      for (const line of chunk.toString().split("\n").filter(Boolean)) {
+        send("log", { message: line });
+      }
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        send("done", { success: true, message: "Server manager rebuilt. This container will restart — connection will drop momentarily." });
+      } else {
+        send("error", { success: false, error: `docker compose exited with code ${code}` });
+      }
+      res.end();
+    });
+
+    proc.on("error", (err) => {
+      send("error", { success: false, error: err.message });
+      res.end();
+    });
+  } catch (err) {
+    send("error", { success: false, error: err.message });
+    res.end();
+  }
+});
+
+// Non-streaming self-rebuild (for MCP tools)
 app.post("/api/self-rebuild", authMiddleware, requireRole("admin"), async (_req, res) => {
   const result = selfRebuild();
   res.status(result.success ? 200 : 500).json(result);

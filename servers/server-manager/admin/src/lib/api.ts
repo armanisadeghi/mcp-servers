@@ -21,8 +21,10 @@ export const API = {
   BUILD_INFO: "/api/build-info",
   BUILD_HISTORY: "/api/build-history",
   REBUILD: "/api/rebuild",
+  REBUILD_STREAM: "/api/rebuild/stream",
   ROLLBACK: "/api/rollback",
   SELF_REBUILD: "/api/self-rebuild",
+  SELF_REBUILD_STREAM: "/api/self-rebuild/stream",
   BUILD_CLEANUP: "/api/build-cleanup",
 } as const;
 
