@@ -199,7 +199,7 @@ function generateCompose(name, config) {
 services:
   app:
     image: matrx-ship:latest
-    container_name: ship-${name}
+    container_name: ${name}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://ship:\${POSTGRES_PASSWORD}@db:5432/ship
@@ -219,10 +219,10 @@ services:
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ship-${name}.rule=Host(\`ship-${name}.${DOMAIN_SUFFIX}\`)"
-      - "traefik.http.routers.ship-${name}.entrypoints=websecure"
-      - "traefik.http.routers.ship-${name}.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ship-${name}.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${name}.rule=Host(\`${name}.${DOMAIN_SUFFIX}\`)"
+      - "traefik.http.routers.${name}.entrypoints=websecure"
+      - "traefik.http.routers.${name}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${name}.loadbalancer.server.port=3000"
 
   db:
     image: ${pgImage}
@@ -279,9 +279,9 @@ function createInstance(name, display_name, api_key, postgres_image) {
   if (config.instances[name]) {
     return { error: `Instance '${name}' already exists.` };
   }
-  const nameCheck = exec(`docker ps -a --format '{{.Names}}' | grep -E '^(ship-${name}|db-${name})$'`);
+  const nameCheck = exec(`docker ps -a --format '{{.Names}}' | grep -E '^(${name}|db-${name})$'`);
   if (nameCheck.success && nameCheck.output) {
-    return { error: `Container ship-${name} or db-${name} already exists.` };
+    return { error: `Container ${name} or db-${name} already exists.` };
   }
 
   const dbPassword = randomHex(16);
@@ -299,8 +299,8 @@ function createInstance(name, display_name, api_key, postgres_image) {
 
   config.instances[name] = {
     display_name,
-    subdomain: `ship-${name}`,
-    url: `https://ship-${name}.${DOMAIN_SUFFIX}`,
+    subdomain: `${name}`,
+    url: `https://${name}.${DOMAIN_SUFFIX}`,
     api_key: finalApiKey,
     db_password: dbPassword,
     postgres_image: postgres_image || config.defaults?.postgres_image || "postgres:17-alpine",
@@ -318,10 +318,10 @@ function createInstance(name, display_name, api_key, postgres_image) {
   return {
     success: startResult.success,
     instance: name,
-    url: `https://ship-${name}.${DOMAIN_SUFFIX}`,
-    admin_url: `https://ship-${name}.${DOMAIN_SUFFIX}/admin`,
+    url: `https://${name}.${DOMAIN_SUFFIX}`,
+    admin_url: `https://${name}.${DOMAIN_SUFFIX}/admin`,
     api_key: finalApiKey,
-    containers: { app: `ship-${name}`, db: `db-${name}` },
+    containers: { app: `${name}`, db: `db-${name}` },
     directory: `/srv/apps/${name}/`,
     compose_output: startResult.output || startResult.error,
     note: "First boot takes ~30s for migrations and seeding.",
@@ -332,7 +332,7 @@ function listInstances() {
   const config = loadDeployments();
   const instances = [];
   for (const [name, info] of Object.entries(config.instances)) {
-    const appStatus = exec(`docker inspect ship-${name} --format '{{.State.Status}}' 2>/dev/null`);
+    const appStatus = exec(`docker inspect ${name} --format '{{.State.Status}}' 2>/dev/null`);
     const dbStatus = exec(`docker inspect db-${name} --format '{{.State.Status}}' 2>/dev/null`);
     instances.push({
       name,
@@ -360,7 +360,7 @@ function removeInstance(name, delete_data) {
     const downFlags = delete_data ? "down -v --remove-orphans" : "down --remove-orphans";
     results.compose_down = exec(`docker compose ${downFlags}`, { cwd: instanceDir, timeout: 60000 });
   } else {
-    exec(`docker rm -f ship-${name} db-${name} 2>/dev/null`);
+    exec(`docker rm -f ${name} db-${name} 2>/dev/null`);
     results.compose_down = { success: true, output: "Containers removed directly" };
   }
 
@@ -561,7 +561,7 @@ function getBuildInfo() {
 
   // Instances info
   const instances = Object.entries(config.instances).map(([n, info]) => {
-    const status = exec(`docker inspect ship-${n} --format '{{.State.Status}}' 2>/dev/null`);
+    const status = exec(`docker inspect ${n} --format '{{.State.Status}}' 2>/dev/null`);
     return { name: n, display_name: info.display_name, status: status.output || "not found" };
   });
 
@@ -1058,7 +1058,7 @@ function createServer() {
     { name: z.string(), service: z.enum(["app", "db", "both"]).optional(), tail: z.number().optional() },
     async ({ name, service, tail }) => {
       const n = tail || 80; const svc = service || "app"; const r = {};
-      if (svc === "app" || svc === "both") r.app = exec(`docker logs ship-${name} --tail ${n} 2>&1`);
+      if (svc === "app" || svc === "both") r.app = exec(`docker logs ${name} --tail ${n} 2>&1`);
       if (svc === "db" || svc === "both") r.db = exec(`docker logs db-${name} --tail ${n} 2>&1`);
       return textResult(r);
     }
@@ -1141,7 +1141,7 @@ app.get("/api/instances/:name", authMiddleware, async (req, res) => {
   if (!info) return res.status(404).json({ error: "Instance not found" });
 
   // Container details
-  const appInspect = exec(`docker inspect ship-${name} 2>/dev/null`);
+  const appInspect = exec(`docker inspect ${name} 2>/dev/null`);
   const dbInspect = exec(`docker inspect db-${name} 2>/dev/null`);
 
   let appDetails = null, dbDetails = null;
@@ -1175,7 +1175,7 @@ app.get("/api/instances/:name", authMiddleware, async (req, res) => {
   } catch {}
 
   // Container stats (CPU + memory) — one-shot, no stream
-  const appStats = exec(`docker stats ship-${name} --no-stream --format '{"cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","mem_pct":"{{.MemPerc}}","net":"{{.NetIO}}","block":"{{.BlockIO}}","pids":"{{.PIDs}}"}' 2>/dev/null`);
+  const appStats = exec(`docker stats ${name} --no-stream --format '{"cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","mem_pct":"{{.MemPerc}}","net":"{{.NetIO}}","block":"{{.BlockIO}}","pids":"{{.PIDs}}"}' 2>/dev/null`);
   const dbStats = exec(`docker stats db-${name} --no-stream --format '{"cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","mem_pct":"{{.MemPerc}}","net":"{{.NetIO}}","block":"{{.BlockIO}}","pids":"{{.PIDs}}"}' 2>/dev/null`);
 
   let appStatsData = null, dbStatsData = null;
@@ -1229,7 +1229,7 @@ app.get("/api/instances/:name", authMiddleware, async (req, res) => {
     status: info.status,
     directory: `/srv/apps/${name}/`,
     containers: {
-      app: { name: `ship-${name}`, ...appDetails, stats: appStatsData },
+      app: { name: `${name}`, ...appDetails, stats: appStatsData },
       db: { name: `db-${name}`, ...dbDetails, stats: dbStatsData },
     },
     env_vars: envVars,
@@ -1417,7 +1417,7 @@ app.get("/api/instances/:name/logs", authMiddleware, async (req, res) => {
   const svc = req.query.service || "app";
   const n = parseInt(req.query.tail) || 80;
   const r = {};
-  if (svc === "app" || svc === "both") r.app = exec(`docker logs ship-${name} --tail ${n} 2>&1`);
+  if (svc === "app" || svc === "both") r.app = exec(`docker logs ${name} --tail ${n} 2>&1`);
   if (svc === "db" || svc === "both") r.db = exec(`docker logs db-${name} --tail ${n} 2>&1`);
   res.json(r);
 });
